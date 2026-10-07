@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NutriScan AI - Analisis Makanan Pribadi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        /* Animasi loading yang halus */
+        .pulse-glow {
+            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: .7; transform: scale(1.05); }
+        }
+
+        /* Styling untuk area dropzone */
+        .dropzone-active {
+            border-color: #10b981; /* Emerald 500 */
+            background-color: #ecfdf5; /* Emerald 50 */
+        }
+        
+        /* Transisi custom */
+        .fade-enter {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .fade-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="bg-gradient-to-br from-emerald-400 to-teal-500 p-2 rounded-xl text-white">
+                    <i data-lucide="salad" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-600">NutriScan AI</h1>
+                    <p class="text-xs text-slate-500">Asisten Ahli Gizi Pribadimu</p>
+                </div>
+            </div>
+            <div>
+                <button onclick="resetApp()" class="text-sm font-medium text-slate-500 hover:text-emerald-600 transition-colors flex items-center gap-1">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Reset
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex flex-col md:flex-row gap-6">
+        
+        <!-- Kolom Kiri: Area Upload -->
+        <div class="w-full md:w-1/2 flex flex-col gap-4">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex-grow flex flex-col h-full min-h-[400px]">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i data-lucide="camera" class="w-5 h-5 text-emerald-500"></i>
+                    Foto Makanan
+                </h2>
+                
+                <!-- Area Dropzone -->
+                <div id="dropzone" class="border-2 border-dashed border-slate-300 rounded-xl flex-grow flex flex-col items-center justify-center p-6 text-center cursor-pointer hover:bg-slate-50 transition-all relative overflow-hidden group">
+                    <input type="file" id="fileInput" class="hidden" accept="image/jpeg, image/png, image/webp" />
+                    
+                    <!-- Kondisi Kosong -->
+                    <div id="uploadPrompt" class="flex flex-col items-center justify-center space-y-3">
+                        <div class="bg-emerald-50 p-4 rounded-full text-emerald-500 group-hover:scale-110 transition-transform duration-300">
+                            <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-slate-700">Klik atau Tarik foto ke sini</p>
+                            <p class="text-sm text-slate-500 mt-1">Mendukung JPG, PNG, WEBP (Max 5MB)</p>
+                        </div>
+                        <button class="mt-4 px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-sm font-medium transition-colors shadow-sm shadow-emerald-200">
+                            Pilih Foto
+                        </button>
+                    </div>
+
+                    <!-- Pratinjau Gambar -->
+                    <img id="imagePreview" class="hidden absolute inset-0 w-full h-full object-cover z-0" alt="Preview Makanan" />
+                    
+                    <!-- Overlay Tombol Ganti -->
+                    <div id="changeImageOverlay" class="hidden absolute inset-0 bg-black/50 z-10 flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div class="bg-white/20 backdrop-blur-sm p-3 rounded-full text-white mb-2">
+                            <i data-lucide="edit-3" class="w-6 h-6"></i>
+                        </div>
+                        <p class="text-white font-medium text-sm">Ganti Foto</p>
+                    </div>
+                </div>
+
+                <!-- Tombol Analisis -->
+                <button id="analyzeBtn" class="mt-4 w-full py-3.5 bg-slate-200 text-slate-500 font-semibold rounded-xl cursor-not-allowed transition-all flex items-center justify-center gap-2" disabled>
+                    <i data-lucide="scan" class="w-5 h-5"></i>
+                    Analisis Nutrisi
+                </button>
+            </div>
+            
+            <!-- Alert Box (Hidden by default) -->
+            <div id="errorAlert" class="hidden bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+                <i data-lucide="alert-circle" class="w-5 h-5 shrink-0 mt-0.5"></i>
+                <span id="errorMessage">Terjadi kesalahan. Silakan coba lagi.</span>
+            </div>
+        </div>
+
+        <!-- Kolom Kanan: Hasil Analisis -->
+        <div class="w-full md:w-1/2 flex flex-col">
+            
+            <!-- State Kosong / Belum ada hasil -->
+            <div id="emptyState" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 flex-grow flex flex-col items-center justify-center text-center text-slate-400 h-full min-h-[400px]">
+                <div class="bg-slate-50 p-6 rounded-full mb-4">
+                    <i data-lucide="pie-chart" class="w-12 h-12 text-slate-300"></i>
+                </div>
+                <h3 class="text-lg font-medium text-slate-600">Belum ada data</h3>
+                <p class="text-sm mt-2 max-w-xs">Unggah foto makananmu di sebelah kiri dan AI kami akan menganalisis kandungan gizinya.</p>
+            </div>
+
+            <!-- State Loading -->
+            <div id="loadingState" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-8 flex-grow flex flex-col items-center justify-center text-center h-full min-h-[400px]">
+                <div class="relative w-20 h-20 mb-6">
+                    <div class="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
+                    <div class="absolute inset-0 border-4 border-emerald-500 rounded-full border-t-transparent animate-spin"></div>
+                    <i data-lucide="sparkles" class="absolute inset-0 m-auto w-8 h-8 text-emerald-500 pulse-glow"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-700 mb-1">AI Sedang Menganalisis...</h3>
+                <p class="text-sm text-slate-500">Mendeteksi bahan, menghitung kalori, dan menyusun saran asupan untukmu.</p>
+            </div>
+
+            <!-- State Hasil Analisis -->
+            <div id="resultState" class="hidden flex-col gap-4 fade-enter">
+                
+                <!-- Nama Makanan & Skor -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-emerald-500 uppercase tracking-wider mb-1">Terdeteksi</p>
+                        <h2 id="resFoodName" class="text-2xl font-bold text-slate-800">-</h2>
+                    </div>
+                    <div class="flex flex-col items-center text-center bg-emerald-50 px-4 py-2 rounded-xl">
+                        <span id="resHealthScore" class="text-2xl font-bold text-emerald-600">-</span>
+                        <span class="text-[10px] uppercase font-bold text-emerald-600/70">Skor Sehat<br>(1-10)</span>
+                    </div>
+                </div>
+
+                <!-- Grid Makronutrisi -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-col items-center text-center">
+                        <div class="bg-orange-50 p-2 rounded-lg text-orange-500 mb-2">
+                            <i data-lucide="flame" class="w-5 h-5"></i>
+                        </div>
+                        <p class="text-xs text-slate-500 font-medium mb-1">Kalori</p>
+                        <p class="text-xl font-bold text-slate-800"><span id="resCalories">0</span> <span class="text-sm font-normal text-slate-500">kcal</span></p>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-col items-center text-center">
+                        <div class="bg-blue-50 p-2 rounded-lg text-blue-500 mb-2">
+                            <i data-lucide="beef" class="w-5 h-5"></i>
+                        </div>
+                        <p class="text-xs text-slate-500 font-medium mb-1">Protein</p>
+                        <p class="text-xl font-bold text-slate-800"><span id="resProtein">0</span> <span class="text-sm font-normal text-slate-500">g</span></p>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-col items-center text-center">
+                        <div class="bg-amber-50 p-2 rounded-lg text-amber-500 mb-2">
+                            <i data-lucide="wheat" class="w-5 h-5"></i>
+                        </div>
+                        <p class="text-xs text-slate-500 font-medium mb-1">Karbohidrat</p>
+                        <p class="text-xl font-bold text-slate-800"><span id="resCarbs">0</span> <span class="text-sm font-normal text-slate-500">g</span></p>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-col items-center text-center">
+                        <div class="bg-rose-50 p-2 rounded-lg text-rose-500 mb-2">
+                            <i data-lucide="droplet" class="w-5 h-5"></i>
+                        </div>
+                        <p class="text-xs text-slate-500 font-medium mb-1">Lemak</p>
+                        <p class="text-xl font-bold text-slate-800"><span id="resFats">0</span> <span class="text-sm font-normal text-slate-500">g</span></p>
+                    </div>
+                </div>
+
+                <!-- Insight & Rekomendasi -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 space-y-4">
+                    <div>
+                        <h3 class="text-sm font-semibold flex items-center gap-2 text-slate-700 mb-2">
+                            <i data-lucide="info" class="w-4 h-4 text-emerald-500"></i> Insight Makanan
+                        </h3>
+                        <p id="resAnalysis" class="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            -
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold flex items-center gap-2 text-slate-700 mb-2">
+                            <i data-lucide="user-check" class="w-4 h-4 text-emerald-500"></i> Saran Ahli Gizi AI
+                        </h3>
+                        <p id="resRecommendation" class="text-sm text-emerald-800 leading-relaxed bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                            -
+                        </p>
+                    </div>
+                </div>
+                
+                <p class="text-xs text-slate-400 text-center mt-2">
+                    *Tersimpan otomatis ke Google Spreadsheet. Estimasi oleh AI.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Inisialisasi Ikon Lucide
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+
+        // Elemen DOM
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const uploadPrompt = document.getElementById('uploadPrompt');
+        const imagePreview = document.getElementById('imagePreview');
+        const changeImageOverlay = document.getElementById('changeImageOverlay');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const errorAlert = document.getElementById('errorAlert');
+        const errorMessage = document.getElementById('errorMessage');
+
+        const emptyState = document.getElementById('emptyState');
+        const loadingState = document.getElementById('loadingState');
+        const resultState = document.getElementById('resultState');
+
+        let currentImageBase64 = null;
+        let currentImageMimeType = null;
+
+        // --- Drag & Drop ---
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dropzone-active'); });
+        dropzone.addEventListener('dragleave', () => { dropzone.classList.remove('dropzone-active'); });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dropzone-active');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+            if (!validTypes.includes(file.type)) {
+                showError("Mohon unggah gambar dengan format JPG, PNG, atau WEBP.");
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                showError("Ukuran gambar terlalu besar. Maksimal 5MB.");
+                return;
+            }
+
+            hideError();
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                imagePreview.classList.remove('hidden');
+                uploadPrompt.classList.add('hidden');
+                changeImageOverlay.classList.remove('hidden');
+                changeImageOverlay.classList.add('flex');
+
+                currentImageBase64 = e.target.result.split(',')[1];
+                currentImageMimeType = file.type;
+
+                analyzeBtn.disabled = false;
+                analyzeBtn.classList.remove('bg-slate-200', 'text-slate-500', 'cursor-not-allowed');
+                analyzeBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'text-white', 'shadow-md', 'shadow-emerald-200/50');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorAlert.classList.remove('hidden');
+            setTimeout(() => { errorAlert.classList.add('hidden'); }, 5000);
+        }
+        function hideError() { errorAlert.classList.add('hidden'); }
+
+        function resetApp() {
+            fileInput.value = "";
+            currentImageBase64 = null;
+            currentImageMimeType = null;
+
+            imagePreview.src = "";
+            imagePreview.classList.add('hidden');
+            uploadPrompt.classList.remove('hidden');
+            changeImageOverlay.classList.add('hidden');
+            changeImageOverlay.classList.remove('flex');
+            
+            analyzeBtn.disabled = true;
+            analyzeBtn.classList.add('bg-slate-200', 'text-slate-500', 'cursor-not-allowed');
+            analyzeBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'text-white', 'shadow-md', 'shadow-emerald-200/50');
+
+            emptyState.classList.remove('hidden');
+            loadingState.classList.add('hidden');
+            resultState.classList.remove('fade-enter-active');
+            setTimeout(() => { resultState.classList.add('hidden'); }, 500);
+            hideError();
+        }
+
+        analyzeBtn.addEventListener('click', () => {
+            if (!currentImageBase64) return;
+
+            emptyState.classList.add('hidden');
+            resultState.classList.add('hidden');
+            resultState.classList.remove('fade-enter-active');
+            loadingState.classList.remove('hidden');
+            hideError();
+            
+            analyzeBtn.disabled = true;
+            const originalBtnText = analyzeBtn.innerHTML;
+            analyzeBtn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Menganalisis...';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            // Panggil fungsi di Code.gs menggunakan google.script.run
+            google.script.run
+                .withSuccessHandler(function(response) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = originalBtnText;
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+                    if (response.success) {
+                        displayResults(response.data);
+                    } else {
+                        showError("Gagal: " + response.error);
+                        loadingState.classList.add('hidden');
+                        emptyState.classList.remove('hidden');
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = originalBtnText;
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    
+                    showError("Error server: " + error.message);
+                    loadingState.classList.add('hidden');
+                    emptyState.classList.remove('hidden');
+                })
+                .analyzeImage(currentImageBase64, currentImageMimeType);
+        });
+
+        function displayResults(data) {
+            loadingState.classList.add('hidden');
+            resultState.classList.remove('hidden');
+            setTimeout(() => { resultState.classList.add('fade-enter-active'); }, 50);
+
+            document.getElementById('resFoodName').textContent = data.foodName;
+            document.getElementById('resAnalysis').textContent = data.analysis;
+            document.getElementById('resRecommendation').textContent = data.recommendation;
+            document.getElementById('resCalories').textContent = data.calories;
+            document.getElementById('resProtein').textContent = data.protein;
+            document.getElementById('resCarbs').textContent = data.carbs;
+            document.getElementById('resFats').textContent = data.fats;
+            
+            const scoreEl = document.getElementById('resHealthScore');
+            const scoreContainer = scoreEl.parentElement;
+            const scoreText = scoreContainer.querySelector('span:last-child');
+            const score = parseInt(data.healthScore);
+            
+            scoreEl.textContent = score;
+            scoreContainer.className = 'flex flex-col items-center text-center px-4 py-2 rounded-xl';
+            scoreEl.className = 'text-2xl font-bold';
+            scoreText.className = 'text-[10px] uppercase font-bold';
+
+            if (score >= 8) {
+                scoreContainer.classList.add('bg-emerald-50');
+                scoreEl.classList.add('text-emerald-600');
+                scoreText.classList.add('text-emerald-600/70');
+            } else if (score >= 5) {
+                scoreContainer.classList.add('bg-amber-50');
+                scoreEl.classList.add('text-amber-600');
+                scoreText.classList.add('text-amber-600/70');
+            } else {
+                scoreContainer.classList.add('bg-red-50');
+                scoreEl.classList.add('text-red-600');
+                scoreText.classList.add('text-red-600/70');
+            }
+        }
+    </script>
+</body>
+</html>

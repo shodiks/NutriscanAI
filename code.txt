@@ -1,0 +1,168 @@
+// ==========================================
+// KONFIGURASI
+// ==========================================
+// Ganti dengan API Key Gemini Anda. Dapatkan di Google AI Studio.
+const GEMINI_API_KEY = "AQ.Ab8RN6LXP0huoE-SvnnJwNMpkNw7HY0SQhKl5LUyChQlHFIhkQ"; 
+
+// Nama sheet tempat menyimpan data
+const SHEET_NAME = "Log Makanan";
+
+/**
+ * Fungsi ini dijalankan pertama kali saat aplikasi web diakses.
+ * Menampilkan file Index.html.
+ */
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('NutriScan AI - Analisis Makanan')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Fungsi pembantu untuk memastikan sheet log ada dan memiliki header yang benar.
+ */
+function setupSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+    // Set Header
+    sheet.appendRow([
+      "Timestamp", 
+      "Nama Makanan", 
+      "Kalori (kcal)", 
+      "Protein (g)", 
+      "Karbohidrat (g)", 
+      "Lemak (g)", 
+      "Skor Kesehatan", 
+      "Analisis", 
+      "Rekomendasi"
+    ]);
+    
+    // Format Header
+    const headerRange = sheet.getRange("A1:I1");
+    headerRange.setFontWeight("bold");
+    headerRange.setBackground("#d1fae5"); // emerald-100
+  }
+  return sheet;
+}
+
+/**
+ * Fungsi utama untuk menganalisis gambar menggunakan Gemini API.
+ * Dipanggil dari sisi klien (Index.html).
+ * 
+ * @param {string} base64Image - Data gambar dalam format base64.
+ * @param {string} mimeType - Tipe MIME gambar (misal: image/jpeg).
+ * @returns {object} - Objek JSON berisi hasil analisis atau pesan error.
+ */
+function analyzeImage(base64Image, mimeType) {
+  try {
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === "MASUKKAN_API_KEY_GEMINI_ANDA_DI_SINI") {
+      throw new Error("API Key Gemini belum diatur di Code.gs");
+    }
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const prompt = "Anda adalah ahli gizi profesional. Analisis foto makanan ini. Berikan perkiraan nama makanan, nilai makronutrisi (Kalori, Protein, Karbohidrat, Lemak dalam gram), skor kesehatan (1-10 dimana 10 sangat sehat), wawasan nutrisi mengenai bahan-bahan, dan rekomendasi asupan pribadi yang ramah bagi pengguna berdasarkan makanan tersebut. Hasil harus akurat sesuai gambar.";
+    
+    // Konfigurasi Payload untuk meminta JSON Schema
+    const payload = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Image
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            "foodName": { type: "STRING", description: "Nama makanan yang terdeteksi secara spesifik, gunakan bahasa Indonesia." },
+            "calories": { type: "INTEGER", description: "Total kalori (kcal)." },
+            "protein": { type: "INTEGER", description: "Total protein dalam gram." },
+            "carbs": { type: "INTEGER", description: "Total karbohidrat dalam gram." },
+            "fats": { type: "INTEGER", description: "Total lemak dalam gram." },
+            "healthScore": { type: "INTEGER", description: "Skor kesehatan dari skala 1 sampai 10." },
+            "analysis": { type: "STRING", description: "1-2 kalimat tentang analisis nutrisi dan bahan utama." },
+            "recommendation": { type: "STRING", description: "Saran ramah bagi orang yang mengonsumsinya." }
+          },
+          required: ["foodName", "calories", "protein", "carbs", "fats", "healthScore", "analysis", "recommendation"]
+        }
+      }
+    };
+
+    const options = {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true // Agar tidak langsung throw error jika status HTTP bukan 200
+    };
+
+    // Panggil API
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    const responseCode = response.getResponseCode();
+    const responseBody = response.getContentText();
+    
+    if (responseCode !== 200) {
+       Logger.log("API Error: " + responseBody);
+       throw new Error(`Gagal menghubungi Gemini API (Status: ${responseCode}). Cek log untuk detail.`);
+    }
+
+    const resultData = JSON.parse(responseBody);
+    
+    if (resultData.candidates && resultData.candidates.length > 0 && 
+        resultData.candidates[0].content && resultData.candidates[0].content.parts.length > 0) {
+        
+        const jsonString = resultData.candidates[0].content.parts[0].text;
+        const analysisData = JSON.parse(jsonString);
+        
+        // Simpan ke Spreadsheet
+        saveToSpreadsheet(analysisData);
+        
+        // Kembalikan ke klien dengan flag success
+        return { success: true, data: analysisData };
+        
+    } else {
+       throw new Error("Format respons dari AI tidak valid atau tidak dikenali.");
+    }
+
+  } catch (error) {
+    Logger.log("Error di analyzeImage: " + error.toString());
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Menyimpan hasil analisis ke Spreadsheet.
+ * @param {object} data - Data hasil analisis dari Gemini.
+ */
+function saveToSpreadsheet(data) {
+  try {
+    const sheet = setupSheet();
+    const timestamp = new Date();
+    
+    sheet.appendRow([
+      timestamp,
+      data.foodName,
+      data.calories,
+      data.protein,
+      data.carbs,
+      data.fats,
+      data.healthScore,
+      data.analysis,
+      data.recommendation
+    ]);
+  } catch (e) {
+    Logger.log("Gagal menyimpan ke sheet: " + e.toString());
+    // Kita tidak melempar error agar aplikasi tetap berjalan meski gagal simpan log
+  }
+}
