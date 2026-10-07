@@ -2,7 +2,7 @@
 // KONFIGURASI
 // ==========================================
 // Ganti dengan API Key Gemini Anda. Dapatkan di Google AI Studio.
-const GEMINI_API_KEY = "AQ.Ab8RN6LXP0huoE-SvnnJwNMpkNw7HY0SQhKl5LUyChQlHFIhkQ"; 
+const GEMINI_API_KEY = ""; 
 
 // Nama sheet tempat menyimpan data
 const SHEET_NAME = "Log Makanan";
